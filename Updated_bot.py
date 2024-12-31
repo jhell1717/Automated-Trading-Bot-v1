@@ -9,8 +9,8 @@ from datetime import datetime
 
 #If you want to trade on paper trading follow this additional step
 
-API_KEY = 'your_api_key_here'
-SECRET_KEY = 'your_secret_key_here'
+API_KEY = 'PKUNA5TMMMBFZUM1BHLV'
+SECRET_KEY = 'tKJaiBcC17Daq1WbjH2jZwKJ7w7QsLnnLASo24d5'
 BASE_URL = 'https://paper-api.alpaca.markets'
 
 # Create an instance of the Alpaca API
@@ -40,7 +40,9 @@ def generate_signals(data):
     sell_signal = (data['EMA_12'] < data['EMA_26']) & (data['RSI'] > 70)
     data.loc[buy_signal, 'Signal'] = 1
     data.loc[sell_signal, 'Signal'] = -1
-    data['Position'] = data['Signal'].replace(to_replace=0, method='ffill')
+    data['Position'] = data['Signal'].replace(to_replace=0, value=None).ffill()
+    data['Signal'] = data['Signal'].fillna(0).astype(int)
+
     return data
 
 data = generate_signals(data)
@@ -53,12 +55,13 @@ def backtest(data, initial_balance=10000):
     entry_price = 0
 
     for i, row in data.iterrows():
-        if row['Signal'] == 1 and balance != 0:
+        # if row['Signal'] == 1 and balance != 0:
+        if row['Signal'] == 1 & balance != 0:
             position = balance / row['Close']
             balance = 0
             entry_price = row['Close']
             logging.info(f"BUY at {row['Close']} on {row.name.date()}")
-        elif row['Signal'] == -1 and position != 0:
+        elif row['Signal'] == -1 & position != 0:
             balance = position * row['Close']
             position = 0
             logging.info(f"SELL at {row['Close']} on {row.name.date()}")
