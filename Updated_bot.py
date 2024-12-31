@@ -17,7 +17,7 @@ BASE_URL = 'https://paper-api.alpaca.markets'
 api = tradeapi.REST(API_KEY, SECRET_KEY, BASE_URL, api_version='v2')
 
 # Download historical data
-data = yf.download("AAPL", start="2022-01-01", end="2022-12-31")
+data = yf.download('EURJPY=X', start="2016-01-01", end="2024-12-31")
 
 def calculate_indicators(data):
     # Exponential Moving Averages
@@ -35,50 +35,53 @@ data = calculate_indicators(data)
 
 def generate_signals(data):
     # Buy and Sell signals based on EMA and RSI
+    pd.set_option('future.no_silent_downcasting', True)
     data['Signal'] = 0
     buy_signal = (data['EMA_12'] > data['EMA_26']) & (data['RSI'] < 30)
     sell_signal = (data['EMA_12'] < data['EMA_26']) & (data['RSI'] > 70)
     data.loc[buy_signal, 'Signal'] = 1
     data.loc[sell_signal, 'Signal'] = -1
-    data['Position'] = data['Signal'].replace(to_replace=0, value=None).ffill()
+    data['Position'] = (data['Signal'].replace(to_replace=0, value=None).ffill().astype(float))
     data['Signal'] = data['Signal'].fillna(0).astype(int)
 
     return data
 
 data = generate_signals(data)
-
+print(data.Signal.unique())
 def backtest(data, initial_balance=10000):
     balance = initial_balance
     position = 0
     stop_loss = 0.95
-    take_profit = 1.10
+    take_profit = 1.2
     entry_price = 0
 
     for i, row in data.iterrows():
-        # if row['Signal'] == 1 and balance != 0:
-        if row['Signal'] == 1 & balance != 0:
-            position = balance / row['Close']
+        signal = row.Signal.iloc[0]
+        close_price = row.Close.iloc[0]
+        # print(type(row['Signal']), type(row['Close']))
+        if signal  == 1 and balance > 0:
+            position = balance / close_price
             balance = 0
-            entry_price = row['Close']
+            entry_price = close_price
             logging.info(f"BUY at {row['Close']} on {row.name.date()}")
-        elif row['Signal'] == -1 & position != 0:
-            balance = position * row['Close']
+        elif signal == -1 and position != 0:
+            balance = position * close_price
             position = 0
-            logging.info(f"SELL at {row['Close']} on {row.name.date()}")
+            logging.info(f"SELL at {close_price} on {row.name.date()}")
             entry_price = 0
 
         if position != 0:
-            if row['Close'] <= entry_price * stop_loss:
-                balance = position * row['Close']
+            if close_price <= entry_price * stop_loss:
+                balance = position * close_price
                 position = 0
-                logging.info(f"STOP LOSS at {row['Close']} on {row.name.date()}")
-            elif row['Close'] >= entry_price * take_profit:
-                balance = position * row['Close']
+                logging.info(f"STOP LOSS at {close_price} on {row.name.date()}")
+            elif close_price >= entry_price * take_profit:
+                balance = position * close_price
                 position = 0
-                logging.info(f"TAKE PROFIT at {row['Close']} on {row.name.date()}")
+                logging.info(f"TAKE PROFIT at {close_price} on {row.name.date()}")
 
     if position != 0:
-        balance = position * data.iloc[-1]['Close']  # Close position at the last available price
+        balance = position * data.iloc[-1]['Close'].values[0]  # Close position at the last available price
 
     return balance
 
@@ -86,4 +89,5 @@ logging.basicConfig(filename='trading_bot.log', level=logging.INFO, format='%(as
 
 final_balance = backtest(data)
 print(f"Final Balance: ${final_balance:.2f}")
+# print(final_balance.values)
 
